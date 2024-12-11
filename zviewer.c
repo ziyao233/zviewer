@@ -227,7 +227,9 @@ curses_cleanup(void)
 static void
 draw_screen(void)
 {
-	assert(prefresh(G.pad, G.rowoff, 0, 0, 0, LINES - 1, COLS) == OK);
+	erase();
+	refresh();
+	prefresh(G.pad, G.rowoff, 0, 0, 0, LINES - 1, COLS);
 }
 
 static void
