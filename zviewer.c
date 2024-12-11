@@ -5,6 +5,7 @@
  *	Copyright (c) 2024 Yao Zi.
  */
 
+#define _GNU_SOURCE
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -16,9 +17,12 @@
 #include <sys/select.h>
 #include <sys/wait.h>
 
-#define fail_if(cond, msg) do { \
+#include <curses.h>
+
+#define fail_if(cond, _msg) do { \
 	if (cond) {							\
-		perror(msg);						\
+		G.err = errno;					\
+		G.msg = _msg;						\
 		exit(-1);						\
 	}								\
 } while (0)
@@ -26,8 +30,16 @@
 struct {
 	const char **renderCmd;
 	int cmdLen;
+
 	char **contents;
 	size_t nlines;
+
+	/* we must put off error messages until curses cleans up */
+	int err;
+	char *msg;
+
+	int cursesEnabled;
+	WINDOW *pad;
 } G;
 
 static void
@@ -75,10 +87,11 @@ do_render(size_t *rlines)
 		fail_if(waitpid(pid, &wstatus, 0) < 0,
 			"failed to read from the render");
 
+		const char *msg;
 		if (!WIFEXITED(wstatus)) {
-			fprintf(stderr, "render terminated");
+			msg = "render terminated";
 		} else if (WEXITSTATUS(wstatus) != 0) {
-			fprintf(stderr, "render failed");
+			msg = "render failed";
 		} else {
 			*rlines = nlines;
 
@@ -86,10 +99,11 @@ do_render(size_t *rlines)
 		}
 
 		if (nlines)
-			fprintf(stderr, ": %s", newContents[0]);
+			asprintf(&G.msg, "%s: %s", msg, newContents[0]);
 		else
-			fprintf(stderr, "\n");
+			asprintf(&G.msg, "%s\n", msg);
 
+		G.err = -1;
 		exit(-1);
 	} else {
 		/*
@@ -119,12 +133,6 @@ do_reload(void)
 	size_t nlines;
 	char **newContents = do_render(&nlines);
 
-	puts("==========================");
-	for (size_t i = 0; i < nlines; i++) {
-		char *line = newContents[i];
-		fwrite(line, 1, strlen(line), stdout);
-	}
-
 	for (size_t i = 0; i < G.nlines; i++)
 		free(G.contents[i]);
 	free(G.contents);
@@ -145,6 +153,32 @@ handle_event(struct inotify_event *ep)
 
 	do_reload();
 	return 0;
+}
+
+static void
+curses_init(void)
+{
+	initscr();
+	cbreak();
+	noecho();
+	intrflush(stdscr, FALSE);
+	keypad(stdscr, TRUE);
+
+	G.cursesEnabled = 1;
+}
+
+static void
+curses_cleanup(void)
+{
+	if (G.cursesEnabled) {
+		delwin(G.pad);
+		endwin();
+	}
+
+	if (G.err > 0)
+		fprintf(stderr, "%s: %s\n", G.msg, strerror(G.err));
+	else if (G.err < 0)
+		fputs(G.msg, stderr);
 }
 
 int
@@ -173,6 +207,9 @@ main(int argc, const char *argv[])
 							    strerror(errno));
 		return -1;
 	}
+
+	curses_init();
+	atexit(curses_cleanup);
 
 	do_reload();
 
