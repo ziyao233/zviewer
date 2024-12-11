@@ -6,6 +6,7 @@
  */
 
 #define _GNU_SOURCE
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -40,6 +41,7 @@ struct {
 
 	int cursesEnabled;
 	WINDOW *pad;
+	int rowoff;
 } G;
 
 static void
@@ -128,18 +130,28 @@ do_render(size_t *rlines)
 }
 
 static void
+set_rowoff(int y)
+{
+	if (y < 0)
+		y = 0;
+	else if (G.nlines <= (size_t)LINES)
+		y = 0;
+	else if ((size_t)y >= G.nlines - (size_t)LINES)
+		y = G.nlines - LINES;
+	G.rowoff = y;
+}
+
+static void
 do_reload(void)
 {
 	size_t nlines;
 	char **newContents = do_render(&nlines);
 
 	delwin(G.pad);
-	G.pad = newpad(nlines, COLS);
+	G.pad = newpad(nlines + 1, COLS);
 
 	for (size_t i = 0; i < nlines; i++)
 		waddstr(G.pad, newContents[i]);
-
-	prefresh(G.pad, 0, 0, 0, 0, LINES, COLS);
 
 	for (size_t i = 0; i < G.nlines; i++)
 		free(G.contents[i]);
@@ -147,6 +159,8 @@ do_reload(void)
 
 	G.contents = newContents;
 	G.nlines = nlines;
+
+	set_rowoff(G.rowoff);
 }
 
 /*
@@ -190,6 +204,53 @@ curses_cleanup(void)
 		fputs(G.msg, stderr);
 }
 
+static void
+draw_screen(void)
+{
+	assert(prefresh(G.pad, G.rowoff, 0, 0, 0, LINES - 1, COLS) == OK);
+}
+
+static void
+handle_key(int key)
+{
+	static int last_key;
+	switch (key) {
+	case 'j':
+	case KEY_DOWN:
+		set_rowoff(G.rowoff + 1);
+		break;
+	case 'k':
+	case KEY_UP:
+	case KEY_ENTER:
+		set_rowoff(G.rowoff - 1);
+		break;
+	case 'u':
+	case KEY_NPAGE:
+		set_rowoff(G.rowoff - LINES / 2);
+		break;
+	case 'd':
+	case KEY_PPAGE:
+		set_rowoff(G.rowoff + LINES / 2);
+		break;
+	case 'g':
+		if (last_key == 'g') {
+			set_rowoff(0);
+			last_key = 0;
+		} else {
+			last_key = key;
+		}
+		break;
+	case 'G':
+		set_rowoff(G.nlines);
+		break;
+	case 'q':
+		exit(0);
+	default:
+		last_key = key;
+		break;
+	}
+}
+
 int
 main(int argc, const char *argv[])
 {
@@ -221,10 +282,12 @@ main(int argc, const char *argv[])
 	atexit(curses_cleanup);
 
 	do_reload();
+	draw_screen();
 
 	fd_set fds;
 	FD_ZERO(&fds);
 	FD_SET(watchfd, &fds);
+	FD_SET(STDIN_FILENO, &fds);
 
 	int ret = 0;
 	while ((ret = select(FD_SETSIZE + 1, &fds, NULL, NULL, NULL)) >= 0) {
@@ -244,10 +307,17 @@ main(int argc, const char *argv[])
 				len -= sizeof(*ep) + ep->len;
 				p += sizeof(*ep) + ep->len;
 			}
+		} else if (FD_ISSET(STDIN_FILENO, &fds)) {
+			handle_key(getch());
+		} else {
+			abort();	// never reaches here
 		}
+
+		draw_screen();
 
 		FD_ZERO(&fds);
 		FD_SET(watchfd, &fds);
+		FD_SET(STDIN_FILENO, &fds);
 	}
 
 	fail_if(ret < 0, "failed to wait for changes");
