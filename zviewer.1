@@ -1,0 +1,38 @@
+.TH zviewer 1 zviewer
+.SH NAME
+.nf
+zviewer - Monitor and view file changes
+.SH SYNOPSIS
+.nf
+.B	zviewer <file> <render> [arg-to-render] ...
+.SH DESCRIPTION
+.I zviewer
+is a simple utility to monitor and view file changes.
+.P
+.I zviewer
+calls the
+.I render-program
+with supplied arguments, takes its stdout as the result and displays it on the
+terminal, where browsing is possible through arrow keys, page up/down or
+Vi-style keys.
+.P
+On change of the
+.IR "monitored file" , " zviewer"
+automatically reinvokes the render and updates the content displayed on the
+terminal.
+.P
+This tool is helpful when writing documentation with non-WYSIWYG
+.RI ( What-You-See-Is-What-You-Get )
+markup languages, for example, Markdown, Roff and HTML.
+.SH EXAMPLE
+Here is a typical usage of zviewer: render changes of a manpage during editing,
+.P
+.EX
+	$ zviewer foo.1 mandoc foo.1
+.EE
+.P
+This allows changes to be automatically rendered onto terminal, easing editing
+work.
+.B
+.SH SEE ALSO
+.IR inotify(7) ,
