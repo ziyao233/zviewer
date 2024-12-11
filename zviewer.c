@@ -153,6 +153,26 @@ do_reload(void)
 	for (size_t i = 0; i < nlines; i++)
 		waddstr(G.pad, newContents[i]);
 
+	/* looking for the changed part and move the focus to it */
+	int rowoff = -1;
+
+	/* check for changes in the prefix */
+	for (size_t i = 0; i < G.nlines && i < nlines; i++) {
+		if (strcmp(G.contents[i], newContents[i])) {
+			rowoff = i;
+			break;
+		}
+	}
+
+	if (rowoff < 0) {
+		if (!G.contents)		// first load
+			rowoff = 0;
+		else if (G.nlines != nlines)	// append/delete at tail
+			rowoff = nlines;
+		else
+			rowoff = G.rowoff;
+	}
+
 	for (size_t i = 0; i < G.nlines; i++)
 		free(G.contents[i]);
 	free(G.contents);
@@ -160,7 +180,7 @@ do_reload(void)
 	G.contents = newContents;
 	G.nlines = nlines;
 
-	set_rowoff(G.rowoff);
+	set_rowoff(rowoff);
 }
 
 /*
