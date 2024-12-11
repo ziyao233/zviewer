@@ -8,10 +8,11 @@
 #define _GNU_SOURCE
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>
+#include <locale.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <limits.h>
 
 #include <unistd.h>
 #include <sys/inotify.h>
@@ -280,6 +281,8 @@ main(int argc, const char *argv[])
 		usage(argv[0]);
 		return -1;
 	}
+
+	setlocale(LC_ALL, "");
 
 	G.cmdLen = argc - 2;
 	G.renderCmd = argv + 2;
