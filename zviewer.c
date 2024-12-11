@@ -133,6 +133,14 @@ do_reload(void)
 	size_t nlines;
 	char **newContents = do_render(&nlines);
 
+	delwin(G.pad);
+	G.pad = newpad(nlines, COLS);
+
+	for (size_t i = 0; i < nlines; i++)
+		waddstr(G.pad, newContents[i]);
+
+	prefresh(G.pad, 0, 0, 0, 0, LINES, COLS);
+
 	for (size_t i = 0; i < G.nlines; i++)
 		free(G.contents[i]);
 	free(G.contents);
@@ -163,6 +171,7 @@ curses_init(void)
 	noecho();
 	intrflush(stdscr, FALSE);
 	keypad(stdscr, TRUE);
+	curs_set(0);
 
 	G.cursesEnabled = 1;
 }
